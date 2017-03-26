@@ -119,14 +119,19 @@ All time engine-commands use milliseconds"
   ((name :documentation "The name of the option"
          :type string
          :accessor option-name
+         :initarg :name
          :initform (error "Name required"))
    (type :documentation "The type of option this is"
          :type keyword
          :accessor option-type
+         :initarg :type
          :initform (error "Type required"))
    (initial-value :documentation "The initial value this option has"
                   :accessor option-initial-value
-                  :initform (error "Initial value Required")))
+                  :initarg :initial-value)
+   (vars :documentation "The list of possible values for a combo-type option"
+         :accessor option-vars
+         :initarg :vars))
   (:documentation "A configurable option that a chess engine supports"))
 
 
@@ -154,13 +159,50 @@ All time engine-commands use milliseconds"
     (nreverse pairs)))
 
 (defun parse-option (string)
+  "Parse an option out of a string"
   (with-input-from-string (stream string)
     (unless (string-equal (read-word stream :string) "option")
       (error "Invalid format ~a" string))
     
     (let ((alist (parse-key-value-pairs stream)))
-      ;; TODO use alist to figure out how to create option
-      alist)))
+      (flet ((get-value (name &optional required)
+               (or (cdr (assoc name alist :test #'string-equal))
+                   (when required
+                     (error "Option ~a required: '~a'" name string)))))
+
+        (let ((name (get-value "name" t))
+              (type (parse-engine-type (get-value "type" t))))
+          
+          (ecase type
+            (:button (make-instance 'engine-option
+                                    :name name
+                                    :type type))
+
+            (:check (make-instance 'engine-option
+                                   :name name
+                                   :type type
+                                   :initial-value (string-equal "true"
+                                                                (get-value "default" t))))
+
+            (:spin (make-instance 'engine-option
+                                  :name name
+                                  :type type
+                                  :min (get-value "min" t)
+                                  :max (get-value "max" t)
+                                  :initial-value (get-value "default" t)))
+
+            (:combo (make-instance 'engine-option
+                                   :name name
+                                   :type type
+                                   :initial-value (get-value "default" t)
+                                   :vars (loop for pair in alist
+                                            when (string-equal "var" (car pair))
+                                            collect (cdr pair))))
+
+            (:string (make-instance 'engine-option
+                                    :name name
+                                    :type type
+                                    :initial-value (get-value "default" t)))))))))
 
 ;(parse-option "option name foo type button")
 
