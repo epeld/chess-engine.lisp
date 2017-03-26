@@ -105,8 +105,8 @@ All time engine-commands use milliseconds"
   "Tell the engine to carry out the pondered move. (But not to start thinking)"
   (engine-command engine "ponderhit~%"))
 
-(defun engine-logs-matching (engine prefix)
-  "Return log entries matching a given prefix"
+(defun engine-logs-starting-with (engine prefix)
+  "Return log entries starting-with a given prefix"
   (let ((logs (engine-log engine)))
     (remove-if-not (lambda (entry)
                      (search (log-entry-content entry)
@@ -208,12 +208,13 @@ All time engine-commands use milliseconds"
 
 (defun engine-options (engine)
   "Return the parsed options, once supplied by the engine"
-  ;; TODO verify "uci" command has been sent
+  (unless (engine-logs-starting-with engine "uci")
+    (error "Engine hasn't been sent UCI yet"))
   (unless (engine-options-cache engine)
     (setf (engine-options-cache engine)
           (mapcar (lambda (entry)
                     (parse-key-value-pairs (log-entry-content entry)))
-                  (engine-logs-matching engine  "option"))))
+                  (engine-logs-starting-with engine  "option"))))
   (engine-options-cache engine))
 
 (defun read-word (stream &optional (type :list))
