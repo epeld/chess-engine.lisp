@@ -1,6 +1,10 @@
 
 (in-package :chess-engine)
 
+(defun prefixed-p (string prefix)
+  "Returns t if 'string' starts with prefix"
+  (search string prefix :end1 (length prefix)))
+
 (defclass engine ()
   ((process :documentation "A handle to the process the engine is running in"
             :reader engine-process
@@ -90,7 +94,7 @@
 
 (defun engine-position (engine fen &rest moves)
   "Tell the engine to set up a given position on its internal board"
-  (engine-command engine "position ~a~{ ~a~}~%" fen moves))
+  (engine-command engine "position ~a~@[ moves~{ ~a~}~]~%" fen moves))
 
 
 (defun engine-go (&key ponder infinite mate movetime
@@ -121,14 +125,19 @@ All time engine-commands use milliseconds"
   (engine-command engine "ponderhit~%"))
 
 
-(defun engine-logs-starting-with (engine prefix)
+(defun engine-logs-starting-with (engine prefix &optional count)
   "Return log entries starting-with a given prefix"
   (let ((logs (engine-log engine)))
     (remove-if-not (lambda (entry)
-                     (search (log-entry-content entry)
-                             prefix
-                             :end1 (length prefix)))
-                   logs)))
+                     (prefixed-p (log-entry-content entry) prefix))
+                   logs
+                   :count count)))
+
+(defun engine-log-position (engine prefix)
+  "Return the index in the engine log of the last entry with a given prefix. (0 being the most recent index)"
+  (position-if (lambda (entry)
+                 (prefixed-p (log-entry-content entry) prefix))
+               (engine-log engine)))
 
 
 (defclass engine-option ()
@@ -223,11 +232,10 @@ All time engine-commands use milliseconds"
                                     :type type
                                     :initial-value (get-value "default" t)))))))))
 
-;(parse-option "option name foo type button")
 
 (defun engine-options (engine)
   "Return the parsed options, once supplied by the engine"
-  (unless (engine-logs-starting-with engine "uci")
+  (unless (engine-logs-starting-with engine "uci" 1)
     (error "Engine hasn't been sent UCI yet"))
   (unless (engine-options-cache engine)
     (setf (engine-options-cache engine)
@@ -247,3 +255,22 @@ Only white space is accepted as word delimiter. Skips the trailing space"
     (if (and word (eq type :string))
         (coerce word 'string)
         word)))
+
+
+(defun engine-thinking-p (engine)
+  "Return T if engine is currently analyzing or pondering a position"
+
+  (let ((bestmove-pos  (engine-log-position engine "bestmove"))
+        (go-pos  (engine-log-position engine "go")))
+
+    ;; The engine is thinking if we told it 'go' and it hasn't reported a best move yet
+    (and go-pos
+         (or (null bestmove-pos)
+             (< go-pos bestmove-pos)))))
+
+
+(defun engine-current-position (engine)
+  "Get the position the engine is supposed to have on its internal board"
+  (let ((log (engine-logs-starting-with engine "position" 1)))
+    (when log
+      (subseq (log-entry-content log) (length "position ")))))
