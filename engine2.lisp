@@ -14,35 +14,43 @@
             :initform nil))
   (:documentation "A chess engine process"))
 
+
 (defun make-engine (process)
   "Construct a new engine instance"
   (make-instance 'engine :process process))
+
 
 (defun engine-input (engine)
   "Returns the engine's input stream"
   (sb-ext:process-input (engine-process engine)))
 
+
 (defun engine-output (engine)
   "Returns the engine's output stream"
   (sb-ext:process-output (engine-process engine)))
+
 
 (defun make-command-log-entry (cmd args)
   "Construct a log entry suitable for insertion into engine log, containing a GUI command"
   `(gui . ,(format nil cmd args)))
 
+
 (defun make-engine-log-entry (reply)
   "Construct a log entry suitable for insertion into engine log, containing an engine reply"
   `(gui . ,reply))
 
+
 (defun log-entry-content (entry)
   "Return the string content of a log entry"
   (cdr entry))
+
 
 (defun engine-command (engine cmd &rest args)
   "Send a command to the engine. Cmd is a format string constructing the command"
   (let ((ws (engine-input engine)))
     (format ws cmd args)
     (push (make-command-log-entry cmd args) (engine-log engine))))
+
 
 (defun engine-read-line (engine &key (wait t))
   "Read a single line, appending it to the log before returning"
@@ -52,6 +60,7 @@
       (setq line (read-line rs))
       (push (make-engine-log-entry line) (engine-log engine))
       line)))
+
 
 (defun engine-read-reply (engine &optional multiple)
   "Collect the replies from the engine, blocking until first line appears"
@@ -65,10 +74,12 @@
   (engine-command engine "quit~%")
   (sb-ext:process-wait (engine-process engine)))
 
+
 (defun engine-uci (engine)
   "Send the 'uci' UCI engine-command to the engine. Telling it to init UCI mode"
   (engine-command engine "uci~%")
   (engine-read-reply engine t))
+
 
 (defun engine-isready (engine)
   "Ask the engine isready. Also tells the engine to initialize its state the first time it is sent."
@@ -76,9 +87,11 @@
   (unless (string= (engine-read-reply engine) "readyok")
     (error "Engine not ready")))
 
+
 (defun engine-position (engine fen &rest moves)
   "Tell the engine to set up a given position on its internal board"
   (engine-command engine "position ~a~{ ~a~}~%" fen moves))
+
 
 (defun engine-go (&key ponder infinite mate movetime
                     nodes depth movestogo searchmoves wtime btime winb binc)
@@ -97,13 +110,16 @@ All time engine-commands use milliseconds"
                              '(mate movetime nodes depth movestogo searchmoves wtime btime winb binc)
                              (list mate movetime nodes depth movestogo searchmoves wtime btime winb binc)))))
 
+
 (defun engine-stop (engine)
   "Stop the engine thinking"
   (engine-command engine "stop~%"))
 
+
 (defun engine-ponderhit (engine)
   "Tell the engine to carry out the pondered move. (But not to start thinking)"
   (engine-command engine "ponderhit~%"))
+
 
 (defun engine-logs-starting-with (engine prefix)
   "Return log entries starting-with a given prefix"
@@ -138,12 +154,14 @@ All time engine-commands use milliseconds"
 (defvar option-types '(:check :spin :combo :button :string)
   "All allowed option types")
 
+
 (defun parse-engine-type (string)
   "Identify the option type from its string representation"
   (or (loop for type in option-types
          when (string-equal type string)
          do (return type))
       (error "Invalid option type ~a" string)))
+
 
 (defun parse-key-value-pairs (stream)
   "Construct an alist of key value pairs from stream"
@@ -157,6 +175,7 @@ All time engine-commands use milliseconds"
           (setq name curr)))
 
     (nreverse pairs)))
+
 
 (defun parse-option (string)
   "Parse an option out of a string"
@@ -216,6 +235,7 @@ All time engine-commands use milliseconds"
                     (parse-key-value-pairs (log-entry-content entry)))
                   (engine-logs-starting-with engine  "option"))))
   (engine-options-cache engine))
+
 
 (defun read-word (stream &optional (type :list))
   "Read a single word from stream, returning the characters as a list.
