@@ -10,7 +10,7 @@
             :reader engine-process
             :initform (error "A process is required")
             :initarg :process)
-   (log :documentation "A log of the conversation between lisp and the engine"
+   (log :documentation "A log of the conversation between lisp and the engine (most recent first)"
         :accessor engine-log
         :initform nil)
    (options :documentation "A cache of the options that the engine supports, once it sends it"
@@ -282,11 +282,20 @@ Only white space is accepted as word delimiter. Skips the trailing space"
 
 
 (defun engine-bestmove (engine)
-  "Return the engine's conclusion, if any, from the last round of analysis"
-  ;; TODO implement this
-  ;; Actually engine-thinking-p == engine-bestmove
-  )
+  "Return the engine's conclusion, if any, from the last round of analysis. Obviously, calling this only makes sense when engine is NOT thinking"
+  (let ((bestmove-pos  (engine-log-position engine "bestmove"))
+        (go-pos  (engine-log-position engine "go")))
+
+    ;; Only accept "bestmove" from the last 'thinking' session
+    (when (and go-pos bestmove-pos (< go-pos bestmove-pos))
+      (nth bestmove-pos (engine-log engine)))))
 
 
 (defun engine-infos (engine)
-  "Return a list of all received engine info messages since 'go'")
+  "Return a list of all received engine info messages since 'go'"
+  (let ((go-pos (engine-log-position engine "go")))
+    (when go-pos
+      (remove-if-not (lambda (entry)
+                       (prefixed-p (log-entry-content entry) "info"))
+                     (engine-log engine)
+                     :end go-pos))))
