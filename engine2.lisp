@@ -281,6 +281,11 @@ Only white space is accepted as word delimiter. Skips the trailing space"
       (subseq (log-entry-content log) (length "position ")))))
 
 
+(defun parse-bestmove (string)
+  ;; TODO
+  string)
+
+
 (defun engine-bestmove (engine)
   "Return the engine's conclusion, if any, from the last round of analysis. Obviously, calling this only makes sense when engine is NOT thinking"
   (let ((bestmove-pos  (engine-log-position engine "bestmove"))
@@ -291,11 +296,16 @@ Only white space is accepted as word delimiter. Skips the trailing space"
       (nth bestmove-pos (engine-log engine)))))
 
 
+(defun parse-info (string)
+  ;; TODO
+  string)
+
+
 (defun engine-infos (engine)
   "Return a list of all received engine info messages since 'go'"
   (let ((go-pos (engine-log-position engine "go")))
     (when go-pos
-      (remove-if-not (lambda (entry)
-                       (prefixed-p (log-entry-content entry) "info"))
-                     (engine-log engine)
-                     :end go-pos))))
+      (loop for entry in (engine-log engine)
+         repeat go-pos
+         when (prefixed-p (log-entry-content entry) "info")
+         collect (parse-info (log-entry-content entry))))))
