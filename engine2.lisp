@@ -85,6 +85,11 @@
   (engine-read-reply engine t))
 
 
+(defun engine-ucinewgame (engine)
+  "Tell the engine to forget everything and start a new game"
+  (engine-command engine "ucinewgame~%"))
+
+
 (defun engine-isready (engine)
   "Ask the engine isready. Also tells the engine to initialize its state the first time it is sent."
   (engine-command engine "isready~%")
