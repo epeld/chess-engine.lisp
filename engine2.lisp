@@ -279,3 +279,14 @@ Only white space is accepted as word delimiter. Skips the trailing space"
   (let ((log (engine-logs-starting-with engine "position" 1)))
     (when log
       (subseq (log-entry-content log) (length "position ")))))
+
+
+(defun engine-bestmove (engine)
+  "Return the engine's conclusion, if any, from the last round of analysis"
+  ;; TODO implement this
+  ;; Actually engine-thinking-p == engine-bestmove
+  )
+
+
+(defun engine-infos (engine)
+  "Return a list of all received engine info messages since 'go'")
