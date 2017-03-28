@@ -280,10 +280,33 @@ Only white space is accepted as word delimiter. Skips the trailing space"
     (when log
       (subseq (log-entry-content log) (length "position ")))))
 
-
 (defun parse-bestmove (string)
-  ;; TODO
-  string)
+  "Parse a bestmove line, returning a 'bestmove'-object"
+  (let ((words (with-input-from-string (stream string)
+                 (loop repeat 4
+                    collect (read-word stream :string)))))
+    (destructuring-bind (bestmove move &optional ponder pondermove) words
+      (unless (string-equal "bestmove" bestmove)
+        (error "Invalid bestmove line '~a'" string))
+      
+      (cond ((null ponder)
+             `(,move . nil))
+
+            ((and (string-equal "ponder" ponder) pondermove)
+             `(,move . ,pondermove))
+
+            (t
+             (error "Invalid bestmove line '~a'" string))))))
+
+
+(defun bestmove-move (bestmove)
+  "Return the suggested move from a bestmove-object"
+  (car bestmove))
+
+
+(defun bestmove-pondermove (bestmove)
+  "Return the ponder move, if any, from a bestmove-object"
+  (cdr bestmove))
 
 
 (defun engine-bestmove (engine)
@@ -293,7 +316,7 @@ Only white space is accepted as word delimiter. Skips the trailing space"
 
     ;; Only accept "bestmove" from the last 'thinking' session
     (when (and go-pos bestmove-pos (< go-pos bestmove-pos))
-      (nth bestmove-pos (engine-log engine)))))
+      (parse-bestmove (nth bestmove-pos (engine-log engine))))))
 
 
 (defun parse-info (string)
