@@ -101,7 +101,9 @@
       (when (eolp)
         (beginning-of-line 0))
       (when (eq 'bestmove (symbol-at-point))
-        (buffer-substring-no-properties (point) (line-end-position))))))
+        (replace-regexp-in-string
+         "ponder " ""
+         (buffer-substring-no-properties (point) (line-end-position)))))))
 
 
 (defun uci-score ()
