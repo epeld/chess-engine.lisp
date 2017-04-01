@@ -1,4 +1,8 @@
 
+(defvar *chess-analysis-current-game* nil)
+(defvar *chess-analysis-current-index* nil)
+(defvar chess-analysis-move-type :san)
+
 (defvar *chess-analysis-process*
   nil
   "A handle to the currently running chess engine process")
@@ -91,49 +95,106 @@
   ;; TODO add all the options
   (uci-command "stop\n"))
 
+(defun next-word ()
+  "Return the next word found in buffer"
+  (let ((start (point)))
+    (forward-word 1)
+    (buffer-substring start (point))))
+
+(defun next-move (pos)
+  (let ((move (next-word)))
+    (unless (eq 4 (length move))
+      (error "Strange move %s" move))
+    (chess-algebraic-to-ply pos move)))
+
 (defun uci-bestmove ()
   "Find the suggested bestmove from the engine"
-  (with-current-buffer (process-buffer *chess-analysis-process*)
-    (save-excursion
-      (goto-char (point-max))
-      (beginning-of-line)
-      ;; move backwards if current line is empty
-      (when (eolp)
-        (beginning-of-line 0))
-      (when (eq 'bestmove (symbol-at-point))
-        (replace-regexp-in-string
-         "ponder " ""
-         (buffer-substring-no-properties (point) (line-end-position)))))))
-
+  (let ((pos (chess-analysis-current-pos)))
+    (with-current-buffer (process-buffer *chess-analysis-process*)
+      (save-excursion
+        (goto-char (point-max))
+        (beginning-of-line)
+        ;; move backwards if current line is empty
+        (when (eolp)
+          (beginning-of-line 0))
+        (when (eq 'bestmove (symbol-at-point))
+          (forward-word 1)              ; move past "bestmove"
+          (forward-char 1)              ; move past space
+          (let ((move (next-move pos))
+                (end (line-end-position)))
+            ;; TODO this whole sequence is "optional" if engine doesn't want to ponder
+            (let ((ponder (search-forward "ponder ")))
+              (when (and ponder
+                         (< ponder end))
+                (let ((ponder-move (next-move (chess-ply-next-pos move))))
+                  (unless ponder-move
+                    (error "Something went wrong"))
+                  (list (chess-ply-to-algebraic move chess-analysis-move-type)
+                        (chess-ply-to-algebraic ponder-move chess-analysis-move-type)))))))))))
 
 (defun uci-score ()
   "Find the latest score reported from the engine"
   (with-current-buffer (process-buffer *chess-analysis-process*)
     (save-excursion
       (goto-char (point-max))
-      (let ((start (search-backward "score cp"))
-            (skip (length "score cp ")))
-        (when start
-          (loop for i from (+ skip (point)) 
-                until (eq (char-after i) 32)
-                finally
-                return (buffer-substring-no-properties (+ skip start) i)))))))
+      
+      ; find the start of the current search session
+      (let ((go (search-backward "go" nil)))
+        (goto-char (point-max))
 
+        ; check for mate
+        (let ((mate (search-backward "score mate" go t)))
+          (if mate
+              (progn
+                (forward-word 2)   ; skip the words "score" and "mate"
+                `(mate . ,(abs (string-to-number (next-word)))))
+            
+            ;; check for centipawn score
+            (let ((start (search-backward "score cp" go t))
+                  (skip (length "score cp ")))
+              (when start
+                (loop for i from (+ skip (point)) 
+                      until (eq (char-after i) 32)
+                      finally
+                      return `(score .
+                                     ,(/ (string-to-number
+                                          (buffer-substring (+ skip start) i))
+                                         (float 100))))))))))))
+
+
+(defun chess-analysis-summary ()
+  (let ((bestmove (uci-bestmove))
+        score)
+    (when bestmove
+      (setq score (uci-score))
+      (format "%s %s %s"
+               (car bestmove)
+               (cadr bestmove)
+               (cond ((eq 'mate (car score))
+                      (format "MATE IN %s" (cdr score)))
+
+                     (t (format "score: %s" (cdr score))))))))
 
 (defun uci-handle-engine-output (output)
-  (let ((bestmove (uci-bestmove)))
-    (when bestmove
-      (message "%s (score %s)" bestmove (uci-score)))))
+  (let ((summary (chess-analysis-summary)))
+    (when summary
+      (message summary))))
 
+
+(defun chess-analysis-current-pos ()
+  (interactive)
+  (or (chess-game-pos *chess-analysis-current-game* *chess-analysis-current-index*)
+      (error "No current position in game %s" *chess-analysis-current-index*)))
 
 (defun chess-analysis-current-fen ()
-  (chess-pos-to-fen (chess-game-pos chess-module-game chess-display-index)
-                    t))
+  (chess-pos-to-fen (chess-analysis-current-pos) t))
 
 
 ;; High Level Interface:
 (defun chess-analysis-analyse ()
   (interactive)
+  (setq *chess-analysis-current-game* chess-module-game)
+  (setq *chess-analysis-current-index* chess-display-index)
   (chess-analysis-engine-running)
   (let ((fen (chess-analysis-current-fen)))
     (uci-set-position fen)
@@ -153,7 +214,6 @@
 (defun chess-analysis-fen ()
   (interactive)
   (message (chess-analysis-current-fen)))
-
 
 (defun chess-analysis-bindings ()
   "Setup bindings for chess analyis"
