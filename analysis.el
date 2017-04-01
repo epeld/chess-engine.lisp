@@ -80,15 +80,19 @@
                    (format "go %s\n")
                  "go\n")))
 
+(defun uci-quick-go ()
+  "Like uci-go but never spends time thinking (at least that is the idea)"
+  (uci-command "go\n"))
+
 
 (defun uci-stop ()
   (interactive)
-  "See the UCI 'go'-command"
+  "See the UCI 'stop'-command"
   ;; TODO add all the options
   (uci-command "stop\n"))
 
-
-(defun uci-handle-engine-output (output)
+(defun uci-bestmove ()
+  "Find the suggested bestmove from the engine"
   (with-current-buffer (process-buffer *chess-analysis-process*)
     (save-excursion
       (goto-char (point-max))
@@ -97,7 +101,27 @@
       (when (eolp)
         (beginning-of-line 0))
       (when (eq 'bestmove (symbol-at-point))
-        (message (buffer-substring-no-properties (point) (line-end-position)))))))
+        (buffer-substring-no-properties (point) (line-end-position))))))
+
+
+(defun uci-score ()
+  "Find the latest score reported from the engine"
+  (with-current-buffer (process-buffer *chess-analysis-process*)
+    (save-excursion
+      (goto-char (point-max))
+      (let ((start (search-backward "score cp"))
+            (skip (length "score cp ")))
+        (when start
+          (loop for i from (+ skip (point)) 
+                until (eq (char-after i) 32)
+                finally
+                return (buffer-substring-no-properties (+ skip start) i)))))))
+
+
+(defun uci-handle-engine-output (output)
+  (let ((bestmove (uci-bestmove)))
+    (when bestmove
+      (message "%s (score %s)" bestmove (uci-score)))))
 
 
 (defun chess-analysis-current-fen ()
@@ -113,8 +137,31 @@
     (uci-set-position fen)
     (uci-go)))
 
+
+(defun chess-analysis-move-forward ()
+  (interactive)
+  (chess-display-move-forward)
+  (chess-analysis-analyse))
+
+(defun chess-analysis-move-backward ()
+  (interactive)
+  (chess-display-move-backward)
+  (chess-analysis-analyse))
+
 (defun chess-analysis-fen ()
   (interactive)
   (message (chess-analysis-current-fen)))
+
+
+(defun chess-analysis-bindings ()
+  "Setup bindings for chess analyis"
+  (interactive)
+  (local-set-key (kbd "p") 'chess-analysis-move-backward)
+  (local-set-key (kbd "n") 'chess-analysis-move-forward)
+  (local-set-key (kbd "C-c C-e") 'chess-analysis-analyse)
+  (local-set-key (kbd "C-c C-g") 'uci-stop))
+ 
+
+ 
 
 (provide 'chess-analysis)
