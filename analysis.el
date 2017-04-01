@@ -43,25 +43,19 @@
     (setq *chess-analysis-process* (get-process "chess-analysis-engine"))
 
     ;; Add a hook to be notified of output:
-    (with-current-buffer buf
+    (with-current-buffer (process-buffer *chess-analysis-process*)
+      (setq comint-output-filter-functions nil)
       (add-hook 'comint-output-filter-functions
                 'uci-handle-engine-output
                 nil
+                t)
+      (add-hook 'comint-output-filter-functions
+                'comint-postoutput-scroll-to-bottom
+                nil
                 t))
-
+    
     (uci-command "uci\n")
     (uci-command "isready\n")))
-
-(with-current-buffer (process-buffer *chess-analysis-process*)
-  ;(setq comint-output-filter-functions nil)
-  (add-hook 'comint-output-filter-functions
-          'uci-handle-engine-output
-          nil
-          t)
-  (add-hook 'comint-output-filter-functions
-            'comint-postoutput-scroll-to-bottom
-            nil
-            t))
 
 (defun uci-set-position (fen &rest moves)
   "See the UCI 'position'-command"
