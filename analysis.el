@@ -81,7 +81,7 @@
   "See the UCI 'go'-command"
   ;; TODO add all the options
   (uci-command (if chess-analysis-go-args
-                   (format "go %s\n")
+                   (format "go %s\n" chess-analysis-go-args)
                  "go\n")))
 
 (defun uci-quick-go ()
@@ -168,12 +168,12 @@
     (when bestmove
       (setq score (uci-score))
       (format "%s %s %s"
-               (car bestmove)
-               (cadr bestmove)
-               (cond ((eq 'mate (car score))
-                      (format "MATE IN %s" (cdr score)))
+              (car bestmove)
+              (cadr bestmove)
+              (cond ((eq 'mate (car score))
+                     (format "MATE IN %s" (cdr score)))
 
-                     (t (format "score: %s" (cdr score))))))))
+                    (t (format "score: %s" (cdr score))))))))
 
 (defun uci-handle-engine-output (output)
   (let ((summary (chess-analysis-summary)))
@@ -191,12 +191,14 @@
 
 
 ;; High Level Interface:
-(defun chess-analysis-analyse ()
-  (interactive)
+(defun chess-analysis-analyse (&optional args)
+  (interactive "s")
   (setq *chess-analysis-current-game* chess-module-game)
   (setq *chess-analysis-current-index* chess-display-index)
   (chess-analysis-engine-running)
-  (let ((fen (chess-analysis-current-fen)))
+  
+  (let ((chess-analysis-go-args args)
+        (fen (chess-analysis-current-fen)))
     (uci-set-position fen)
     (uci-go)))
 
