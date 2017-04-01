@@ -132,6 +132,18 @@
                   (list (chess-ply-to-algebraic move chess-analysis-move-type)
                         (chess-ply-to-algebraic ponder-move chess-analysis-move-type)))))))))))
 
+
+(defun uci-depth ()
+  (with-current-buffer (process-buffer *chess-analysis-process*)
+    (save-excursion
+      (let ((go (search-backward "go" nil)))
+        (goto-char (point-max))
+
+        (let ((depth (search-backward "depth" go nil)))
+          (when depth
+            (forward-word 1)
+            (string-to-number (next-word))))))))
+
 (defun uci-score ()
   "Find the latest score reported from the engine"
   (with-current-buffer (process-buffer *chess-analysis-process*)
@@ -163,17 +175,20 @@
 
 
 (defun chess-analysis-summary ()
+  ;; TODO we can actually extract a lot more info from here.
+  ;; most interesting is probably the pv-line in e.g SAN-format
   (let ((bestmove (uci-bestmove))
         score)
     (when bestmove
       (setq score (uci-score))
-      (format "%s %s %s"
+      (format "%s %s %s (depth: %d)"
               (car bestmove)
               (cadr bestmove)
               (cond ((eq 'mate (car score))
                      (format "MATE IN %s" (cdr score)))
 
-                    (t (format "score: %s" (cdr score))))))))
+                    (t (format "score: %s" (cdr score))))
+              (uci-depth)))))
 
 (defun uci-handle-engine-output (output)
   (let ((summary (chess-analysis-summary)))
