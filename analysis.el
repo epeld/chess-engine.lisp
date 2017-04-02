@@ -60,6 +60,9 @@
     ;; Ensure buffer exists
     (unless (get-buffer *chess-analysis-summary-buffer*)
       (generate-new-buffer *chess-analysis-summary-buffer*))
+
+    (with-current-buffer (process-buffer (get-process "chess-analysis-engine"))
+      (setq truncate-lines t))
     
     (setq *chess-analysis-process* (get-process "chess-analysis-engine"))
 
