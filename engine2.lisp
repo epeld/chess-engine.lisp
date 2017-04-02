@@ -319,9 +319,15 @@ Only white space is accepted as word delimiter. Skips the trailing space"
       (parse-bestmove (nth bestmove-pos (engine-log engine))))))
 
 
-(defun parse-info (string)
-  ;; TODO
-  string)
+(defun read-words (string)
+  (with-input-from-string (stream string)
+    (loop with word
+       do (setq word (read-word stream :string))
+       until (null word)
+       collect word)))
+
+;; TODO write parse-info
+;(read-words "info foo 3 bar 33")
 
 
 (defun engine-infos (engine)
