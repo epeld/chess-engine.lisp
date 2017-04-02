@@ -266,7 +266,7 @@
     (goto-char (point-max))
     (setq last-line (search-backward "\n" nil nil)) ;; raise error if not found!
        
-    (list last-go last-line)))
+    (list (or last-go 1) last-line)))
 
 
 (defmacro with-current-analysis-session (&rest body)
@@ -277,12 +277,15 @@
                             ,@body))))
 
 
+(defun chess-analysis-update-summary ()
+  (let ((summary (chess-analysis-summary)))
+    (with-current-buffer *chess-analysis-summary-buffer*
+      (erase-buffer)
+      (insert-string summary))))
+
 (defun uci-handle-engine-output (output)
   (when (find ?\C-j output)
-    (let ((summary (chess-analysis-summary)))
-      (with-current-buffer *chess-analysis-summary-buffer*
-        (erase-buffer)
-        (insert-string summary)))))
+    (chess-analysis-update-summary)))
 
 
 (defun chess-analysis-current-pos ()
