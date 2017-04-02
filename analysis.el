@@ -229,7 +229,7 @@
            (format-moves (chess-analysis-current-pos) (uci-pv))
            (chess-analysis-format-score (uci-score))
            (uci-statistic "time" nil "ms")
-           (uci-statistic "depth")
+           (uci-statistic " depth") ; the space is important. otherwise we match "seldepth"
            (uci-statistic "nodes")
            (uci-statistic "nps")
            (uci-statistic "hashfull" (lambda (x) (/ x 10)) " %")
