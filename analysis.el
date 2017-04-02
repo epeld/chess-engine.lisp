@@ -3,7 +3,6 @@
 (defvar *chess-analysis-current-index* nil)
 (defvar chess-analysis-move-type :san)
 
-
 (defvar *chess-analysis-process*
   nil
   "A handle to the currently running chess engine process")
@@ -138,11 +137,22 @@
 
 
 (defun moves-to-plies (pos moves)
-  (let ((ply (chess-algebraic-to-ply pos (car moves))))
+  (let ((ply (chess-algebraic-to-ply pos (car moves)))
+        next-pos)
+    (unless ply
+      (if (eq 5 (length ply))
+          ;; Add an error telling the user that this problem can be worked around!
+          (error "Couldn't interpret %s. Is this a promotion? You might need to patch emacs-chess." (car moves))
+        (error "Couldn't interpret %s" (car moves))))
+
+    (setq next-pos (chess-ply-next-pos ply))
+
+    (unless next-pos
+      (error "Couldn't calculate new position %s" (chess-ply-to-algebraic ply :san)))
+    
     (cons ply
-          (if (rest moves)
-              (moves-to-plies (chess-ply-next-pos ply) (rest moves))
-            nil))))
+          (when (rest moves)
+            (moves-to-plies next-pos (rest moves))))))
 
 
 (defun uci-bestmove ()
