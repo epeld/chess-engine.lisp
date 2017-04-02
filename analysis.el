@@ -53,7 +53,7 @@
 
 (defun chess-analysis-init ()
   "Start up a new chess engine for analysis"
-  (let* ((buf (generate-new-buffer "*Chess Analysis*"))
+  (let* (;(buf (generate-new-buffer "*Chess Analysis*"))
          (proc (make-comint "chess-analysis-engine"
                             (executable-find "stockfish"))))
 
@@ -74,13 +74,18 @@
                 'comint-postoutput-scroll-to-bottom
                 nil
                 t))
-    
+ 
     (uci-command "uci\n")
     (uci-command "isready\n")))
 
 
 (defun uci-set-position (fen &rest moves)
   "See the UCI 'position'-command"
+  ;; Be careful not to change position while engine is calculating
+  ;; because that will confuse our gui code..
+  (with-current-analysis-session
+   (unless (uci-bestmove)
+     (uci-stop)))
   (let (parts)
     (push "position" parts)
     (push "fen" parts)
