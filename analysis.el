@@ -3,18 +3,32 @@
 (defvar *chess-analysis-current-index* nil)
 (defvar chess-analysis-move-type :san)
 
+
 (defvar *chess-analysis-process*
   nil
   "A handle to the currently running chess engine process")
+
 
 (defvar chess-analysis-go-args
   nil
   "Arguments to go as a string. Try e.g \"infinite\"")
 
+
+(defvar *chess-analysis-summary-buffer*
+  "Chess Analysis Overview"
+  "Buffer where we report summaries of the engine analysis")
+
+
+(defun skip-whitespace ()
+  (skip-chars-forward " \t"))
+
+
+
 (defun chess-analysis-engine-running ()
   (unless (and *chess-analysis-process*
                (eq 'run (process-status *chess-analysis-process*)))
     (chess-analysis-init)))
+
 
 (defun uci-command (command)
   (assert *chess-analysis-process*)
@@ -27,7 +41,7 @@
     ;; add a ">"-prompt to indicate we are issuing a command,
     ;; ..and update mark
     (goto-char (point-max))
-    (unless (eolp) }
+    (unless (eolp)
       (insert-string "\n"))
     (insert-string "> " command)
     (set-marker (process-mark *chess-analysis-process*) (point))
@@ -40,9 +54,12 @@
 (defun chess-analysis-init ()
   "Start up a new chess engine for analysis"
   (let* ((buf (generate-new-buffer "*Chess Analysis*"))
-         
          (proc (make-comint "chess-analysis-engine"
                             (executable-find "stockfish"))))
+
+    ;; Ensure buffer exists
+    (unless (get-buffer *chess-analysis-summary-buffer*)
+      (generate-new-buffer *chess-analysis-summary-buffer*))
     
     (setq *chess-analysis-process* (get-process "chess-analysis-engine"))
 
@@ -60,6 +77,7 @@
     
     (uci-command "uci\n")
     (uci-command "isready\n")))
+
 
 (defun uci-set-position (fen &rest moves)
   "See the UCI 'position'-command"
@@ -84,6 +102,7 @@
                    (format "go %s\n" chess-analysis-go-args)
                  "go\n")))
 
+
 (defun uci-quick-go ()
   "Like uci-go but never spends time thinking (at least that is the idea)"
   (uci-command "go\n"))
@@ -95,111 +114,177 @@
   ;; TODO add all the options
   (uci-command "stop\n"))
 
+
 (defun next-word ()
   "Return the next word found in buffer"
   (let ((start (point)))
     (forward-word 1)
     (buffer-substring start (point))))
 
-(defun next-move (pos)
+
+(defun parse-ply (pos)
   (let ((move (next-word)))
     (unless (eq 4 (length move))
       (error "Strange move %s" move))
     (chess-algebraic-to-ply pos move)))
 
+
+(defun moves-to-plies (pos moves)
+  (let ((ply (chess-algebraic-to-ply pos (car moves))))
+    (cons ply
+          (if (rest moves)
+              (moves-to-plies (chess-ply-next-pos ply) (rest moves))
+            nil))))
+
+
 (defun uci-bestmove ()
   "Find the suggested bestmove from the engine"
-  (let ((pos (chess-analysis-current-pos)))
-    (with-current-buffer (process-buffer *chess-analysis-process*)
-      (save-excursion
-        (goto-char (point-max))
-        (beginning-of-line)
-        ;; move backwards if current line is empty
-        (when (eolp)
-          (beginning-of-line 0))
-        (when (eq 'bestmove (symbol-at-point))
-          (forward-word 1)              ; move past "bestmove"
-          (forward-char 1)              ; move past space
-          (let ((move (next-move pos))
-                (end (line-end-position)))
-            ;; TODO this whole sequence is "optional" if engine doesn't want to ponder
-            (let ((ponder (search-forward "ponder ")))
-              (when (and ponder
-                         (< ponder end))
-                (let ((ponder-move (next-move (chess-ply-next-pos move))))
-                  (unless ponder-move
-                    (error "Something went wrong"))
-                  (list (chess-ply-to-algebraic move chess-analysis-move-type)
-                        (chess-ply-to-algebraic ponder-move chess-analysis-move-type)))))))))))
+  (goto-char (point-max))
+
+  (when (search-backward "bestmove" nil t)
+    (forward-word 1)
+    (skip-whitespace)
+        
+    (let ((move (next-word)))
+      (if (search-forward "ponder" (line-end-position) t)
+          (progn
+            (skip-whitespace)
+            (list move (next-word)))
+        (list move)))))
 
 
-(defun uci-depth ()
-  (with-current-buffer (process-buffer *chess-analysis-process*)
-    (save-excursion
-      (let ((go (search-backward "go" nil)))
-        (goto-char (point-max))
+(defun uci-statistic (word &optional fn unit)
+  "Find a single statistic"
+  (goto-char (point-max))
+  (let ((id (lambda (x) x)))
+    (or (when (search-backward word nil t)
+        (forward-word 1)
+        (format "%s%s" (funcall (or fn id)
+                                (string-to-number (next-word)))
+                (or unit "")))
+      "N/A")))
 
-        (let ((depth (search-backward "depth" go nil)))
-          (when depth
-            (forward-word 1)
-            (string-to-number (next-word))))))))
+
+(defun uci-pv ()
+  "Find the primary variation sequence"
+  ;; Example line:
+  ;; info depth 11 seldepth 16 multipv 1 score cp 481 nodes 11409 nps 814928 tbhits 0 time 14 pv h4g5 a8f8
+  (goto-char (point-max))
+  (when (search-backward "multipv" nil t)
+    (search-forward " pv" nil nil)
+    (skip-whitespace)
+    (split-string (buffer-substring (point) (line-end-position))
+                  " " t " ")))
+
 
 (defun uci-score ()
   "Find the latest score reported from the engine"
-  (with-current-buffer (process-buffer *chess-analysis-process*)
-    (save-excursion
-      (goto-char (point-max))
-      
-      ; find the start of the current search session
-      (let ((go (search-backward "go" nil)))
-        (goto-char (point-max))
+  ;; Examples:
+  ;; info depth 27 seldepth 38 multipv 1 score mate 10 nodes 23104622 nps 1681436 hashfull 999 tbhits 0 time 13741 pv f1f6 b6f6 e5f6 f8g7 h5g6 e7f7 c1f1 b7c6 g6h7 g8f8 f6g7 f8e7 f1f7 e7f7 g7e5 f7e8 d3g6 e8f8 e5d6
+  (goto-char (point-max))
 
-        ; check for mate
-        (let ((mate (search-backward "score mate" go t)))
-          (if mate
-              (progn
-                (forward-word 2)   ; skip the words "score" and "mate"
-                `(mate . ,(abs (string-to-number (next-word)))))
+  ;; check for mate
+  (let ((mate (search-backward "score mate" nil t)))
+    (if mate
+        (progn
+          (forward-char (length "score mate")) ; skip the words "score" and "mate"
+          (skip-whitespace)                    ;skip whitespace
+          `(mate . ,(abs (string-to-number (next-word)))))
             
-            ;; check for centipawn score
-            (let ((start (search-backward "score cp" go t))
-                  (skip (length "score cp ")))
-              (when start
-                (loop for i from (+ skip (point)) 
-                      until (eq (char-after i) 32)
-                      finally
-                      return `(score .
-                                     ,(/ (string-to-number
-                                          (buffer-substring (+ skip start) i))
-                                         (float 100))))))))))))
+      ;; check for centipawn score
+      (let ((start (search-backward "score cp" nil t))
+            (skip (length "score cp ")))
+        (when start
+          (loop for i from (+ skip (point)) 
+                until (eq (char-after i) 32)
+                finally
+                return `(score .
+                               ,(/ (string-to-number
+                                    (buffer-substring (+ skip start) i))
+                                   (float 100)))))))))
+
+
+(defun chess-analysis-format-score (score)
+  (cond ((eq 'mate (car score))
+         (format "MATE IN %s" (cdr score)))
+
+        (t (format "%s" (cdr score)))))
+
+(defun format-moves (pos moves)
+  (json-join (loop for ply in (moves-to-plies pos moves)
+                   collect (chess-ply-to-algebraic ply chess-analysis-move-type))
+             " "))
 
 
 (defun chess-analysis-summary ()
-  ;; TODO we can actually extract a lot more info from here.
-  ;; most interesting is probably the pv-line in e.g SAN-format
-  (let ((bestmove (uci-bestmove))
-        score)
-    (when bestmove
-      (setq score (uci-score))
-      (format "%s %s %s (depth: %d)"
-              (car bestmove)
-              (cadr bestmove)
-              (cond ((eq 'mate (car score))
-                     (format "MATE IN %s" (cdr score)))
+  "foo"
+  ;; Ex info depth 27 seldepth 38 multipv 1 score mate 10 nodes 23104622 nps 1681436 hashfull 999 tbhits 0 time 13741 pv f1f6 b6f6 e5f6 f8g7 h5g6 e7f7 c1f1 b7c6 g6h7 g8f8 f6g7 f8e7 f1f7 e7f7 g7e5 f7e8 d3g6 e8f8 e5d6
+  (with-current-analysis-session
+   (format "\nPV: %s\nScore: %s\n\nTime: %s, Depth: %s\nNodes: %s (%s nps), Hash: %s, Hits: %s\n\n%s"
+           (format-moves (chess-analysis-current-pos) (uci-pv))
+           (chess-analysis-format-score (uci-score))
+           (uci-statistic "time" nil "ms")
+           (uci-statistic "depth")
+           (uci-statistic "nodes")
+           (uci-statistic "nps")
+           (uci-statistic "hashfull" (lambda (x) (/ x 10)) " %")
+           (uci-statistic "tbhits")
+           (if (uci-bestmove) "Stopped" "Running"))))
 
-                    (t (format "score: %s" (cdr score))))
-              (uci-depth)))))
+
+(defmacro with-engine-buffer (&rest body)
+  `(with-current-buffer (process-buffer *chess-analysis-process*)
+     ,@body))
+
+
+(defmacro with-narrowed-region (bounds &rest body)
+  (let ((bs (gensym "bounds")))
+    `(let (,bs)
+
+       (widen)
+       (setq ,bs ,bounds)
+       (narrow-to-region (first ,bs) (second ,bs))
+       
+       (unwind-protect
+           (progn ,@body)
+         (widen)))))
+
+
+(defun last-go-bounds ()
+  ;; Look for "go" and (the last) "\n"
+  ;; Because any input without a trailing "\n" is not complete
+  (let (last-go last-line)
+       
+    (goto-char (point-max))
+    (setq last-go (search-backward "go" nil t))
+       
+    (goto-char (point-max))
+    (setq last-line (search-backward "\n" nil nil)) ;; raise error if not found!
+       
+    (list last-go last-line)))
+
+
+(defmacro with-current-analysis-session (&rest body)
+  "Execute body in a context where the current buffer contains the last 'go'-session only"
+  `(with-engine-buffer
+    (save-excursion
+      (with-narrowed-region (last-go-bounds)
+                            ,@body))))
+
 
 (defun uci-handle-engine-output (output)
-  (let ((summary (chess-analysis-summary)))
-    (when summary
-      (message summary))))
+  (when (find ?\C-j output)
+    (let ((summary (chess-analysis-summary)))
+      (with-current-buffer *chess-analysis-summary-buffer*
+        (erase-buffer)
+        (insert-string summary)))))
 
 
 (defun chess-analysis-current-pos ()
   (interactive)
   (or (chess-game-pos *chess-analysis-current-game* *chess-analysis-current-index*)
       (error "No current position in game %s" *chess-analysis-current-index*)))
+
 
 (defun chess-analysis-current-fen ()
   (chess-pos-to-fen (chess-analysis-current-pos) t))
@@ -223,14 +308,17 @@
   (chess-display-move-forward)
   (chess-analysis-analyse))
 
+
 (defun chess-analysis-move-backward ()
   (interactive)
   (chess-display-move-backward)
   (chess-analysis-analyse))
 
+
 (defun chess-analysis-fen ()
   (interactive)
   (message (chess-analysis-current-fen)))
+
 
 (defun chess-analysis-bindings ()
   "Setup bindings for chess analyis"
@@ -239,8 +327,6 @@
   (local-set-key (kbd "n") 'chess-analysis-move-forward)
   (local-set-key (kbd "C-c C-e") 'chess-analysis-analyse)
   (local-set-key (kbd "C-c C-g") 'uci-stop))
- 
-
- 
+  
 
 (provide 'chess-analysis)
