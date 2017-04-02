@@ -274,10 +274,11 @@
   (let (last-go last-line)
        
     (goto-char (point-max))
-    (setq last-go (search-backward "go" nil t))
+    (setq last-go (or (search-backward "go" nil t)
+                      1))
        
     (goto-char (point-max))
-    (setq last-line (search-backward "\n" nil nil)) ;; raise error if not found!
+    (setq last-line (search-backward "\n" last-go nil)) ;; raise error if not found!
        
     (list (or last-go 1) last-line)))
 
