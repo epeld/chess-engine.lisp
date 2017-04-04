@@ -237,9 +237,10 @@
         (t (format "%s" (cdr score)))))
 
 (defun format-moves (pos moves)
-  (s-join " "
-          (loop for ply in (moves-to-plies pos moves)
-                collect (chess-ply-to-algebraic ply chess-analysis-move-type))))
+  (when (and moves pos)
+    (s-join " "
+            (loop for ply in (moves-to-plies pos moves)
+                  collect (chess-ply-to-algebraic ply chess-analysis-move-type)))))
 
 
 (defun chess-analysis-summary ()
