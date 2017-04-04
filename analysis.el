@@ -97,7 +97,7 @@
       (loop for move in moves do (push move parts)))
     (push "\n" parts)
 
-    (let ((cmd (json-join (nreverse parts) " ")))
+    (let ((cmd (s-join " " (nreverse parts))))
       ;(message cmd)
       (uci-command cmd))))
 
@@ -229,9 +229,9 @@
         (t (format "%s" (cdr score)))))
 
 (defun format-moves (pos moves)
-  (json-join (loop for ply in (moves-to-plies pos moves)
-                   collect (chess-ply-to-algebraic ply chess-analysis-move-type))
-             " "))
+  (s-join " "
+          (loop for ply in (moves-to-plies pos moves)
+                collect (chess-ply-to-algebraic ply chess-analysis-move-type))))
 
 
 (defun chess-analysis-summary ()
