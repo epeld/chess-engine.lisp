@@ -49,6 +49,12 @@
     ;; Send command and receive output
     (comint-send-string *chess-analysis-process* command)))
 
+(defun chess-analysis-popup ()
+  (let ((buf (get-buffer *chess-analysis-summary-buffer*)))
+    (unless (get-buffer-window buf)
+      (display-buffer-in-major-side-window buf
+                                           'side
+                                           nil))))
 
 (defun chess-analysis-init ()
   "Start up a new chess engine for analysis"
@@ -76,6 +82,8 @@
                 'comint-postoutput-scroll-to-bottom
                 nil
                 t))
+
+    (chess-analysis-popup)
  
     (uci-command "uci\n")
     (uci-command "isready\n")))
@@ -327,12 +335,14 @@
 
 (defun chess-analysis-move-forward ()
   (interactive)
+  (chess-analysis-popup)
   (chess-display-move-forward)
   (chess-analysis-analyse))
 
 
 (defun chess-analysis-move-backward ()
   (interactive)
+  (chess-analysis-popup)
   (chess-display-move-backward)
   (chess-analysis-analyse))
 
