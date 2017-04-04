@@ -6,7 +6,7 @@ Screenie:
 ![alt sceenie](screenie.png)
 
 ## Usage:
-Use `emacs-chess` to read a chess game using `chess-pgn-read`.
+Use `emacs-chess` to read a chess game using `chess-pgn-read`. I recommend that you decrease the image size until you have a chessboard that covers only half the frame.
 
 Once you have the board up and running, load `analysis.el` then type `chess-analysis-bindings` to install some key bindings.
 
